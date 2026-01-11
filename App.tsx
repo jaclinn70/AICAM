@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AppMode, HistoryItem } from './types';
 import { PRESETS } from './constants';
-import { processImage } from './services/geminiService';
+import { processImage } from './geminiService';
 
 declare global {
   interface Window {
@@ -10,46 +10,22 @@ declare global {
   }
 }
 
-/**
- * Оптимизированное сжатие. 
- * Для Telegram WebApp критически важно держать размер строки минимальным.
- */
-const compressForAI = async (base64: string, quality: number = 0.6): Promise<string> => {
+const compressImage = async (base64: string): Promise<string> => {
   return new Promise((resolve, reject) => {
-    if (!base64 || !base64.startsWith('data:image')) {
-      return reject("Invalid base64");
-    }
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const MAX_SIZE = 700; // Уменьшаем еще немного для стабильности
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_SIZE) {
-          height *= MAX_SIZE / width;
-          width = MAX_SIZE;
-        }
-      } else {
-        if (height > MAX_SIZE) {
-          width *= MAX_SIZE / height;
-          height = MAX_SIZE;
-        }
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
+      const MAX_SIZE = 800; 
+      let w = img.width;
+      let h = img.height;
+      if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } }
+      else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
+      canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
-      if (!ctx) return reject("Canvas failure");
-      
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'medium';
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality)); 
+      if (!ctx) return reject();
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
     };
-    img.onerror = () => reject("Image load failed");
     img.src = base64;
   });
 };
@@ -57,46 +33,18 @@ const compressForAI = async (base64: string, quality: number = 0.6): Promise<str
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('CAMERA');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
-  
-  // Храним изображения
   const [originalPhoto, setOriginalPhoto] = useState<string | null>(null);
-  const [baseImage, setBaseImage] = useState<string | null>(null);
   const [displayImage, setDisplayImage] = useState<string | null>(null);
-  
-  const [activeCategory, setActiveCategory] = useState<string>('Улучшения');
-  const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [shutterActive, setShutterActive] = useState(false);
-  const [loadingText, setLoadingText] = useState('Магия...');
+  const [activeCategory, setActiveCategory] = useState<string>('Улучшения');
+  const [credits, setCredits] = useState(10);
   
-  // ИСТОРИЯ: Теперь только в памяти и максимум 5 штук!
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  const [credits, setCredits] = useState<number>(() => {
-    const saved = localStorage.getItem('ai_camera_credits');
-    return saved ? parseInt(saved) : 10;
-  });
-  const [showStore, setShowStore] = useState(false);
-
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tg = window.Telegram?.WebApp;
-
-  useEffect(() => {
-    localStorage.setItem('ai_camera_credits', credits.toString());
-  }, [credits]);
-
-  useEffect(() => {
-    if (isProcessing) {
-      const texts = ["Синтезируем...", "Добавляем стиль...", "Рисуем...", "Финальный штрих..."];
-      let i = 0;
-      const interval = setInterval(() => {
-        setLoadingText(texts[i % texts.length]);
-        i++;
-      }, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isProcessing]);
 
   useEffect(() => {
     if (tg) {
@@ -106,321 +54,229 @@ const App: React.FC = () => {
       tg.backgroundColor = '#000000';
       
       const handleBack = () => {
-        if (showStore) {
-          setShowStore(false);
-        } else if (mode !== 'CAMERA') {
+        if (mode !== 'CAMERA') {
           setMode('CAMERA');
-          setOriginalPhoto(null);
-          setBaseImage(null);
           setDisplayImage(null);
-          setCustomPrompt('');
+          setOriginalPhoto(null);
         }
       };
+      
       tg.BackButton.onClick(handleBack);
+      if (mode !== 'CAMERA') tg.BackButton.show(); else tg.BackButton.hide();
       return () => tg.BackButton.offClick(handleBack);
     }
-  }, [tg, mode, showStore]);
-
-  useEffect(() => {
-    if (tg) {
-      if (mode !== 'CAMERA' || showStore) tg.BackButton.show();
-      else tg.BackButton.hide();
-    }
-  }, [mode, tg, showStore]);
+  }, [tg, mode]);
 
   const startCamera = useCallback(async () => {
     if (mode !== 'CAMERA') return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) {
-      console.error("Camera error:", err);
+    } catch (e) { 
+      tg?.showAlert("Ошибка камеры. Проверьте разрешения в настройках.");
     }
-  }, [facingMode, mode]);
+  }, [facingMode, mode, tg]);
 
-  useEffect(() => {
-    startCamera();
-    return () => {
-      if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-      }
-    };
-  }, [startCamera]);
+  useEffect(() => { startCamera(); }, [startCamera]);
 
-  const captureFrame = () => {
-    if (credits <= 0) { setShowStore(true); return; }
+  const capture = () => {
     if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (video.videoWidth === 0) return;
-
-      setShutterActive(true);
-      setTimeout(() => setShutterActive(false), 80);
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
+      const v = videoRef.current;
+      const c = canvasRef.current;
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      const ctx = c.getContext('2d');
       if (ctx) {
-        if (facingMode === 'user') {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // Первый снимок делаем в нормальном качестве
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setOriginalPhoto(dataUrl);
-        setBaseImage(dataUrl);
-        setDisplayImage(dataUrl);
+        setShutterActive(true);
+        setTimeout(() => setShutterActive(false), 100);
+        if (facingMode === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(v, 0, 0);
+        const url = c.toDataURL('image/jpeg', 0.9);
+        setOriginalPhoto(url);
+        setDisplayImage(url);
         setMode('PREVIEW');
-        tg?.HapticFeedback.impactOccurred('medium');
+        tg?.HapticFeedback.impactOccurred('heavy');
       }
     }
-  }
+  };
 
-  const handleProcess = async (prompt: string, presetName: string = 'Свой стиль') => {
-    if (isProcessing || !displayImage) return;
-    if (credits <= 0) { setShowStore(true); return; }
-
+  const runAI = async (prompt: string, name: string) => {
+    if (isProcessing || !originalPhoto) return;
     setIsProcessing(true);
-    tg?.HapticFeedback.impactOccurred('light');
-    
+    tg?.HapticFeedback.impactOccurred('medium');
+
     try {
-      // Сжимаем перед отправкой еще сильнее
-      const optimizedSource = await compressForAI(displayImage, 0.5);
-      const result = await processImage(optimizedSource, prompt);
+      const small = await compressImage(originalPhoto);
+      const res = await processImage(small, prompt);
       
-      // Жесткая проверка: строка должна быть длинной и начинаться с data:image
-      if (result && result.startsWith('data:image') && result.length > 1000) { 
-        setDisplayImage(result);
-        setCredits(prev => Math.max(0, prev - 1));
-        
-        const newItem: HistoryItem = {
-          id: Date.now().toString(),
-          original: optimizedSource,
-          processed: result,
-          presetName: presetName,
-          timestamp: Date.now()
-        };
-        // Храним только 5 последних в памяти!
-        setHistory(prev => [newItem, ...prev].slice(0, 5));
+      if (res) {
+        setDisplayImage(res);
+        setCredits(c => Math.max(0, c - 1));
+        setHistory(h => [{ 
+          id: Date.now().toString(), 
+          original: originalPhoto, 
+          processed: res, 
+          presetName: name, 
+          timestamp: Date.now() 
+        }, ...h].slice(0, 10));
         tg?.HapticFeedback.notificationOccurred('success');
       } else {
-        throw new Error("Invalid API response");
+        tg?.showAlert("Не удалось обработать. Попробуйте другой фильтр.");
       }
-    } catch (err) {
-      console.error(err);
-      tg?.showPopup({ title: 'Ошибка', message: 'Не удалось обработать. Попробуй еще раз или смени промпт.' });
-      tg?.HapticFeedback.notificationOccurred('error');
+    } catch (e) { 
+      tg?.showAlert("Ошибка связи с ИИ. Проверьте интернет.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const fixResult = () => {
-    if (displayImage) {
-      setBaseImage(displayImage);
-      tg?.HapticFeedback.impactOccurred('medium');
-      tg?.showAlert('Закреплено! Теперь эффекты будут накладываться поверх этого результата.');
-    }
-  };
-
-  const resetToOriginal = () => {
-    if (!originalPhoto) return;
-    setBaseImage(originalPhoto);
-    setDisplayImage(originalPhoto);
-    setCustomPrompt('');
-    tg?.HapticFeedback.impactOccurred('light');
-  };
-
-  const downloadImage = () => {
+  const sharePhoto = () => {
     if (!displayImage) return;
-    const link = document.createElement('a');
-    link.href = displayImage;
-    link.download = `aicam-${Date.now()}.jpg`;
-    link.click();
-    tg?.HapticFeedback.notificationOccurred('success');
+    tg?.showPopup({
+      title: 'Поделиться',
+      message: 'Вы можете сохранить изображение или отправить его в чат.',
+      buttons: [
+        { id: 'save', type: 'default', text: 'Скачать' },
+        { id: 'cancel', type: 'destructive', text: 'Отмена' }
+      ]
+    }, (id: string) => {
+      if (id === 'save') {
+        const a = document.createElement('a');
+        a.href = displayImage;
+        a.download = 'ai_photo.png';
+        a.click();
+      }
+    });
   };
 
   return (
     <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden">
-      
       <div className={`fixed inset-0 z-[100] bg-white transition-opacity duration-150 pointer-events-none ${shutterActive ? 'opacity-100' : 'opacity-0'}`} />
+      
+      {mode === 'CAMERA' && (
+        <div className="h-full relative flex flex-col">
+          <div className="absolute top-12 left-6 right-6 flex justify-between items-center z-50">
+             <div className="font-black italic text-2xl tracking-tighter drop-shadow-2xl">AI<span className="text-blue-500">.</span>CAM</div>
+             <div className="glass px-4 py-2 rounded-full text-xs font-bold border border-white/10 shadow-xl">⚡️ {credits}</div>
+          </div>
+          
+          <video ref={videoRef} autoPlay playsInline muted className={`flex-grow w-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
 
-      <div className="fixed top-0 left-0 right-0 z-[60] px-6 pt-10 pb-10 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
-        <h1 className="text-xl font-black italic tracking-tighter">AI.CAM</h1>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setMode('GALLERY')} className="w-10 h-10 rounded-full glass flex items-center justify-center text-lg active:scale-90 transition-transform">🖼️</button>
-          <button onClick={() => setShowStore(true)} className="glass flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 active:scale-90 transition-transform">
-            <span className="text-yellow-400 font-bold">⚡️</span>
-            <span className="text-sm font-bold">{credits}</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="relative h-full w-full">
-        
-        {/* CAMERA */}
-        <div className={`absolute inset-0 z-10 transition-opacity duration-300 ${mode === 'CAMERA' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <video ref={videoRef} autoPlay playsInline muted className={`h-full w-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
-          <div className="absolute inset-x-0 bottom-12 flex flex-col items-center gap-6">
-            <div className="flex items-center justify-center gap-10">
-               <button onClick={() => { setFacingMode(f => f === 'user' ? 'environment' : 'user'); tg?.HapticFeedback.impactOccurred('light'); }} className="w-12 h-12 rounded-full glass flex items-center justify-center text-xl">🔄</button>
-               <button onClick={captureFrame} className="w-20 h-20 rounded-full border-4 border-white/30 p-1 active:scale-95 transition-transform">
-                  <div className="w-full h-full rounded-full bg-white shadow-lg" />
-               </button>
-               <button onClick={() => setMode('GALLERY')} className="w-12 h-12 rounded-xl glass overflow-hidden flex items-center justify-center">
-                  {history.length > 0 ? <img src={history[0].processed} className="w-full h-full object-cover opacity-60" /> : <div className="text-white/20 text-xs">🎞️</div>}
-               </button>
-            </div>
+          <div className="absolute inset-x-0 bottom-12 flex justify-center items-center gap-10 z-50">
+            <button onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')} className="w-14 h-14 rounded-full glass flex items-center justify-center text-2xl border border-white/10 active:scale-90 transition-transform">🔄</button>
+            <button onClick={capture} className="w-24 h-24 rounded-full border-[6px] border-white/20 p-1.5 active:scale-95 transition-transform"><div className="w-full h-full bg-white rounded-full shadow-2xl"/></button>
+            <button onClick={() => setMode('GALLERY')} className="w-14 h-14 rounded-2xl glass overflow-hidden border border-white/10 active:scale-90 transition-transform flex items-center justify-center">
+              {history[0] ? <img src={history[0].processed} className="w-full h-full object-cover" /> : <span className="text-xl">🖼️</span>}
+            </button>
           </div>
         </div>
+      )}
 
-        {/* PREVIEW & EDITOR */}
-        <div className={`absolute inset-0 z-20 bg-zinc-950 transition-all duration-500 ease-out flex flex-col ${mode === 'PREVIEW' ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}>
-          <div className="flex-grow flex items-center justify-center p-4 pt-24 pb-4 overflow-hidden relative">
-            {displayImage ? (
-              <img 
-                key={displayImage.slice(-10)} 
-                src={displayImage} 
-                className="max-h-full max-w-full rounded-2xl shadow-2xl object-contain bg-black" 
-              />
-            ) : (
-              <div className="w-12 h-12 border-2 border-white/10 rounded-full animate-pulse" />
-            )}
+      {mode === 'PREVIEW' && displayImage && (
+        <div className="h-full flex flex-col bg-black">
+          <div 
+            className="flex-grow flex items-center justify-center p-4 pt-16 relative overflow-hidden touch-none"
+            onPointerDown={() => setShowOriginal(true)}
+            onPointerUp={() => setShowOriginal(false)}
+            onPointerLeave={() => setShowOriginal(false)}
+          >
+            <img 
+              src={showOriginal ? originalPhoto! : displayImage} 
+              className="max-h-full max-w-full rounded-3xl shadow-2xl object-contain transition-all duration-200" 
+              alt="Preview"
+            />
             
+            {showOriginal && (
+              <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20">Оригинал</div>
+            )}
+
             {isProcessing && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center z-50">
-                <div className="w-10 h-10 border-4 border-white/10 border-t-white rounded-full animate-spin mb-6" />
-                <p className="text-[10px] uppercase font-black tracking-widest animate-pulse">{loadingText}</p>
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center z-50">
+                <div className="w-12 h-12 border-4 border-t-blue-500 border-white/10 rounded-full animate-spin mb-6" />
+                <div className="text-[11px] uppercase font-black tracking-[0.3em] animate-pulse">Нейросеть думает...</div>
               </div>
             )}
           </div>
 
-          <div className="bg-zinc-900 rounded-t-[2.5rem] p-6 pb-12 shadow-[0_-20px_60px_rgba(0,0,0,0.6)] border-t border-white/5">
-            <div className="flex flex-col gap-5">
-              
-              <div className="flex justify-between items-center px-1">
-                <div className="flex gap-4">
-                  <button onClick={fixResult} className={`text-[10px] font-black uppercase tracking-widest transition-all ${displayImage !== baseImage ? 'text-green-400' : 'text-white/20'}`}>
-                    ✅ Оставить
-                  </button>
-                  <button onClick={resetToOriginal} className={`text-[10px] font-black uppercase tracking-widest transition-all ${displayImage !== originalPhoto ? 'text-red-500' : 'text-white/20'}`}>
-                    🔄 Сброс
-                  </button>
-                </div>
-                <button onClick={downloadImage} className="text-[10px] font-black uppercase tracking-widest text-blue-400 active:scale-90 transition-transform">
-                  💾 Скачать
-                </button>
-              </div>
-
-              <div className="relative">
-                <textarea 
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Добавь детали к фото..."
-                  className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl p-4 pr-16 text-sm focus:border-white/30 focus:outline-none transition-all resize-none placeholder:text-white/20"
-                />
+          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-t-[3rem] p-6 pb-12 border-t border-white/10">
+            <div className="flex gap-6 mb-6 overflow-x-auto no-scrollbar justify-start px-2">
+              {['Улучшения', 'Цвет и Тон', 'Арт-стили'].map(cat => (
                 <button 
-                  onClick={() => handleProcess(customPrompt)}
-                  disabled={!customPrompt.trim() || isProcessing}
-                  className="absolute right-3 bottom-2 w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center disabled:opacity-20 active:scale-90 transition-all shadow-xl"
+                  key={cat} 
+                  onClick={() => setActiveCategory(cat)} 
+                  className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all relative pb-2 ${activeCategory === cat ? 'text-white' : 'text-white/30'}`}
                 >
-                  🚀
+                  {cat}
+                  {activeCategory === cat && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full" />}
                 </button>
-              </div>
+              ))}
+            </div>
 
-              <div className="flex flex-col gap-3">
-                <div className="flex gap-5 overflow-x-auto no-scrollbar">
-                  {['Улучшения', 'Цвет и Тон', 'Арт-стили'].map(cat => (
-                    <button key={cat} onClick={() => setActiveCategory(cat)} className={`text-[9px] uppercase font-black tracking-[0.2em] transition-all whitespace-nowrap ${activeCategory === cat ? 'text-white' : 'text-white/20'}`}>{cat}</button>
-                  ))}
-                </div>
-                
-                <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                  {PRESETS.filter(p => p.category === activeCategory).map(p => (
-                    <button 
-                      key={p.id} 
-                      onClick={() => handleProcess(p.prompt, p.name)}
-                      disabled={isProcessing}
-                      className="flex items-center gap-2 px-4 py-3 bg-white/5 border border-white/5 rounded-xl min-w-max active:bg-white/10 transition-colors"
-                    >
-                      <span className="text-base">{p.icon}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-tight">{p.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-8 py-2">
+              {PRESETS.filter(p => p.category === activeCategory).map(p => (
+                <button 
+                  key={p.id} 
+                  onClick={() => runAI(p.prompt, p.name)} 
+                  className="glass px-5 py-4 rounded-2xl min-w-max flex flex-col items-center gap-2 border border-white/5 active:bg-blue-500/20 active:border-blue-500/40 transition-all shadow-lg"
+                >
+                  <span className="text-2xl">{p.icon}</span> 
+                  <span className="text-[9px] font-black uppercase tracking-wider">{p.name}</span>
+                </button>
+              ))}
+            </div>
 
+            <div className="flex gap-4">
               <button 
                 onClick={() => { setMode('CAMERA'); setDisplayImage(null); }} 
-                className="w-full py-4 mt-1 bg-zinc-800/30 text-white/20 rounded-2xl font-black text-[9px] uppercase tracking-[0.4em] active:bg-zinc-800 active:text-white transition-all"
+                className="flex-grow py-5 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] active:bg-white/10 border border-white/5"
               >
-                Закрыть редактор
+                Отмена
+              </button>
+              <button 
+                onClick={sharePhoto} 
+                className="flex-grow py-5 bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] active:opacity-80 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+              >
+                Готово
               </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* GALLERY (Session only) */}
-        <div className={`absolute inset-0 z-30 bg-black transition-all duration-300 ${mode === 'GALLERY' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}>
-          <div className="p-8 pt-28 h-full flex flex-col">
-            <h2 className="text-3xl font-black italic tracking-tighter mb-8">СЕССИЯ</h2>
-            <p className="text-[9px] text-white/30 uppercase tracking-widest mb-6">История очищается при выходе</p>
-            {history.length === 0 ? (
-              <div className="flex-grow flex flex-col items-center justify-center text-white/10 uppercase font-black text-[10px] tracking-[0.5em]">Пусто</div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 overflow-y-auto no-scrollbar pb-24">
-                {history.map(item => (
-                  <div key={item.id} className="aspect-[4/5] rounded-2xl overflow-hidden border border-white/5 active:scale-95 transition-transform" onClick={() => { 
-                    setOriginalPhoto(item.original); 
-                    setBaseImage(item.processed); 
-                    setDisplayImage(item.processed); 
-                    setMode('PREVIEW'); 
-                  }}>
-                    <img src={item.processed} className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            )}
+      {mode === 'GALLERY' && (
+        <div className="h-full p-8 pt-24 bg-black overflow-y-auto no-scrollbar">
+          <div className="flex justify-between items-center mb-12">
+            <h2 className="text-5xl font-black italic tracking-tighter">АРХИВ</h2>
+            <button onClick={() => setMode('CAMERA')} className="w-10 h-10 rounded-full glass flex items-center justify-center">✕</button>
           </div>
-        </div>
-
-      </div>
-
-      <canvas ref={canvasRef} className="hidden" />
-
-      {/* STORE */}
-      {showStore && (
-        <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl p-10 flex flex-col pt-24">
-           <div className="flex justify-between items-center mb-12">
-              <h2 className="text-3xl font-black italic tracking-tighter">ЭНЕРГИЯ</h2>
-              <button onClick={() => setShowStore(false)} className="w-10 h-10 glass rounded-full flex items-center justify-center">✕</button>
-           </div>
-           <div className="flex flex-col gap-4">
-              {[ { n: 10, p: 50, i: '🔋' }, { n: 50, p: 190, i: '🔥' } ].map(pkg => (
-                <button key={pkg.n} className="glass p-6 rounded-3xl border border-white/5 flex justify-between items-center active:bg-white/5 transition-colors">
-                   <div className="flex items-center gap-4">
-                     <span className="text-2xl">{pkg.i}</span>
-                     <span className="text-xl font-black italic">{pkg.n} ⚡️</span>
-                   </div>
-                   <span className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-black">{pkg.p} STARS</span>
-                </button>
+          {history.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-40 opacity-20">
+              <span className="text-6xl mb-4">🎞️</span>
+              <div className="uppercase text-[10px] font-black tracking-[0.5em]">Нет снимков</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-5 pb-32">
+              {history.map(item => (
+                <div key={item.id} onClick={() => { setDisplayImage(item.processed); setOriginalPhoto(item.original); setMode('PREVIEW'); }} className="group relative aspect-[3/4] rounded-3xl overflow-hidden border border-white/5 active:scale-95 transition-all shadow-2xl bg-zinc-900">
+                  <img src={item.processed} className="w-full h-full object-cover" loading="lazy" />
+                  <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg text-[8px] font-bold uppercase border border-white/10">{item.presetName}</div>
+                </div>
               ))}
-              <p className="text-[10px] text-white/30 text-center mt-6">Приложение находится в режиме Beta</p>
-           </div>
+            </div>
+          )}
         </div>
       )}
 
+      <canvas ref={canvasRef} className="hidden" />
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .animate-pulse { animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.98); } }
+        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
       `}</style>
     </div>
   );
