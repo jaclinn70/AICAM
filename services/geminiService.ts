@@ -1,22 +1,17 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please configure your environment.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
 /**
  * Сервис обработки фото через Gemini 2.5 Flash Image.
+ * Оптимизирован для работы в Telegram WebView.
  */
 export const processImage = async (base64Image: string, prompt: string): Promise<string | null> => {
   try {
     if (!base64Image || !base64Image.includes(',')) return null;
 
-    const ai = getAI();
+    // Инициализация прямо перед вызовом гарантирует использование актуального ключа из окружения
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const [header, data] = base64Image.split(',');
     const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
 
@@ -25,22 +20,23 @@ export const processImage = async (base64Image: string, prompt: string): Promise
       contents: {
         parts: [
           { inlineData: { data, mimeType } },
-          { text: `Act as a professional photo editor. Apply the following effect: ${prompt}. Return ONLY the edited image.` }
+          { text: `Transform this image into: ${prompt}. Return ONLY the edited image as inline data.` }
         ],
       },
     });
 
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (!parts) return null;
-
-    for (const part of parts) {
-      if (part.inlineData?.data) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+    const candidates = response.candidates;
+    if (candidates?.[0]?.content?.parts) {
+      for (const part of candidates[0].content.parts) {
+        if (part.inlineData?.data) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
       }
     }
+    
     return null;
   } catch (error) {
-    console.error("Gemini Error:", error);
+    console.error("Gemini Service Error:", error);
     return null;
   }
 };
