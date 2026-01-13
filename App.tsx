@@ -12,7 +12,7 @@ declare global {
 
 const UI_STRINGS = {
   ru: {
-    onboarding_title: 'Твоя AI Камера',
+    onboarding_title: 'Умная ИИ-камера',
     step1_t: 'Снимай', step1_d: 'Обычное фото.',
     step2_t: 'Стили', step2_d: 'Готовые фильтры.',
     step3_t: 'Энергия', step3_d: '1 заряд = 1 обработка.',
@@ -43,7 +43,7 @@ const UI_STRINGS = {
     mirror: 'Зеркало'
   },
   en: {
-    onboarding_title: 'Your AI Camera',
+    onboarding_title: 'Smart AI Camera',
     step1_t: 'Capture', step1_d: 'Take a photo.',
     step2_t: 'Styles', step2_d: 'AI filters.',
     step3_t: 'Energy', step3_d: '1 charge = 1 edit.',
@@ -122,7 +122,6 @@ const App: React.FC = () => {
 
   const t = useMemo(() => UI_STRINGS[lang], [lang]);
 
-  // MainButton Control
   useEffect(() => {
     if (tg?.MainButton) {
       if (mode === 'PREVIEW' && !isProcessing) {
@@ -150,7 +149,9 @@ const App: React.FC = () => {
       const tgLang = tg?.initDataUnsafe?.user?.language_code;
       if (tgLang && tgLang.startsWith('en')) setLang('en');
     }
-  }, []);
+    const seen = localStorage.getItem('ai_cam_onboarding_seen');
+    if (!seen) setShowOnboarding(true);
+  }, [tg]);
 
   useEffect(() => {
     setActiveCategory(t.categories[0]);
@@ -181,8 +182,6 @@ const App: React.FC = () => {
       if (mode !== 'CAMERA') tg.BackButton.show(); else tg.BackButton.hide();
       return () => tg.BackButton.offClick(onBack);
     }
-    const seen = localStorage.getItem('ai_cam_onboarding_seen');
-    if (!seen) setShowOnboarding(true);
   }, [tg, mode]);
 
   const startCamera = useCallback(async () => {
@@ -262,6 +261,13 @@ const App: React.FC = () => {
     } finally { setIsProcessing(false); }
   };
 
+  const toggleLanguage = () => {
+    const next = lang === 'ru' ? 'en' : 'ru';
+    setLang(next);
+    localStorage.setItem('ai_cam_lang', next);
+    tg?.HapticFeedback?.impactOccurred('light');
+  };
+
   const handleAction = (type: 'PAYPAL' | 'YOOMONEY' | 'SAVE') => {
     tg?.HapticFeedback?.impactOccurred('light');
     if (type === 'SAVE' && displayImage) {
@@ -284,9 +290,20 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
       <div className={`fixed inset-0 z-[100] bg-white transition-opacity duration-150 pointer-events-none ${shutterActive ? 'opacity-100' : 'opacity-0'}`} />
       
+      {/* Global Header - Always visible on top of everything including onboarding */}
+      <div className="fixed top-12 left-6 right-6 flex justify-between items-center z-[250]">
+         <div className="font-black italic text-2xl tracking-tighter">AI<span className="text-blue-500">.</span>CAM</div>
+         <div className="flex items-center gap-2">
+            <button onClick={toggleLanguage} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 uppercase min-w-[38px] transition-colors active:bg-white active:text-black">{lang}</button>
+            {mode === 'CAMERA' && !showOnboarding && <button onClick={() => { setIsMirrored(!isMirrored); tg?.HapticFeedback?.impactOccurred('light'); }} className={`glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 ${isMirrored ? 'bg-white text-black' : 'text-white/40'}`}>🪞</button>}
+            <button onClick={() => setActiveActionSheet('RECHARGE')} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10">⚡️ {credits}</button>
+            <button onClick={() => setActiveActionSheet('SUPPORT')} className="glass w-9 h-9 rounded-full flex items-center justify-center border border-white/10 text-lg">💎</button>
+         </div>
+      </div>
+
       {showOnboarding && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500 overflow-y-auto no-scrollbar">
-          <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-2xl">📸</div>
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center animate-in duration-500 overflow-y-auto no-scrollbar">
+          <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-2xl mt-16">📸</div>
           <h2 className="text-2xl font-black italic tracking-tighter mb-6 uppercase">{t.onboarding_title}</h2>
           <div className="space-y-4 text-left w-full max-w-xs mb-8">
             {[{ icon: '📸', t: t.step1_t, d: t.step1_d }, { icon: '🪄', t: t.step2_t, d: t.step2_d }, { icon: '⚡️', t: t.step3_t, d: t.step3_d }].map((step, i) => (
@@ -302,8 +319,8 @@ const App: React.FC = () => {
 
       {activeActionSheet !== 'NONE' && (
         <>
-          <div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setActiveActionSheet('NONE')} />
-          <div className="fixed inset-x-0 bottom-0 z-[160] bg-zinc-900 rounded-t-[2.5rem] p-6 pb-12 animate-in slide-in-from-bottom duration-300 border-t border-white/10 max-h-[90vh] overflow-y-auto" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
+          <div className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm animate-in" onClick={() => setActiveActionSheet('NONE')} />
+          <div className="fixed inset-x-0 bottom-0 z-[310] bg-zinc-900 rounded-t-[2.5rem] p-6 pb-12 animate-in border-t border-white/10 max-h-[90vh] overflow-y-auto" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
             <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-8" />
             {activeActionSheet === 'SAVE' && <button onClick={() => handleAction('SAVE')} className="w-full py-5 bg-blue-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-[0.98] transition-all">{t.action_download}</button>}
             {activeActionSheet === 'SUPPORT' && (
@@ -336,15 +353,6 @@ const App: React.FC = () => {
 
       {mode === 'CAMERA' && (
         <div className="h-full relative flex flex-col bg-black">
-          <div className="fixed top-12 left-6 right-6 flex justify-between items-center z-[60]">
-             <div className="font-black italic text-2xl tracking-tighter">AI<span className="text-blue-500">.</span>CAM</div>
-             <div className="flex items-center gap-2">
-                <button onClick={() => { const next = lang === 'ru' ? 'en' : 'ru'; setLang(next); localStorage.setItem('ai_cam_lang', next); tg?.HapticFeedback?.impactOccurred('light'); }} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 uppercase">{lang}</button>
-                <button onClick={() => { setIsMirrored(!isMirrored); tg?.HapticFeedback?.impactOccurred('light'); }} className={`glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 ${isMirrored ? 'bg-white text-black' : 'text-white/40'}`}>🪞</button>
-                <button onClick={() => setActiveActionSheet('RECHARGE')} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10">⚡️ {credits}</button>
-                <button onClick={() => setActiveActionSheet('SUPPORT')} className="glass w-9 h-9 rounded-full flex items-center justify-center border border-white/10 text-lg">💎</button>
-             </div>
-          </div>
           <div className="flex-grow w-full relative overflow-hidden bg-zinc-950 flex items-center justify-center">
              <video ref={videoRef} autoPlay playsInline muted className={`absolute transition-all duration-300 object-cover ${isMirrored ? 'scale-x-[-1]' : 'scale-x-[1]'}`} style={{ width: '100%', height: '100%', aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9' }} />
           </div>
@@ -358,9 +366,9 @@ const App: React.FC = () => {
 
       {mode === 'PREVIEW' && displayImage && (
         <div className="h-full flex flex-col bg-black relative">
-          <div className="flex-grow flex items-center justify-center p-4 pt-16 relative overflow-hidden touch-none" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)} onPointerLeave={() => setShowOriginal(false)}>
+          <div className="flex-grow flex items-center justify-center p-4 pt-24 pb-4 relative overflow-hidden touch-none" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)} onPointerLeave={() => setShowOriginal(false)}>
             <img src={showOriginal ? originalPhoto! : displayImage} className={`rounded-3xl shadow-2xl transition-all duration-200 object-cover ${aspectRatio === '9:16' ? 'h-full w-auto aspect-[9/16]' : 'w-full h-auto aspect-[16/9]'}`} alt="Preview" />
-            {showOriginal && <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 z-10">{t.original}</div>}
+            {showOriginal && <div className="absolute top-28 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 z-10">{t.original}</div>}
             {isProcessing && <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center z-50"><div className="w-12 h-12 border-4 border-t-blue-500 border-white/10 rounded-full animate-spin mb-6" /><div className="text-[10px] font-black uppercase tracking-widest animate-pulse">{t.drawing}</div></div>}
           </div>
           <div className="bg-zinc-900/90 backdrop-blur-2xl rounded-t-[3rem] p-6 pb-20 border-t border-white/10" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
@@ -371,8 +379,8 @@ const App: React.FC = () => {
             </div>
             <div className="min-h-[100px] mb-4">
               {activeCategory === t.categories[t.categories.length-1] ? (
-                <div className="relative animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder={t.custom_placeholder} rows={3} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-blue-500 pr-14 resize-none leading-relaxed block" />
+                <div className="relative animate-in">
+                  <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder={t.custom_placeholder} rows={3} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-blue-500 pr-14 resize-none leading-relaxed block text-white" />
                   <button onClick={() => runAI(customPrompt, t.custom_style)} disabled={!customPrompt.trim() || isProcessing} className="absolute right-3 bottom-3 w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-lg active:scale-90 transition-all disabled:opacity-50 shadow-lg">🪄</button>
                 </div>
               ) : (
@@ -390,7 +398,7 @@ const App: React.FC = () => {
       )}
 
       {mode === 'GALLERY' && (
-        <div className="h-full p-8 pt-16 bg-black overflow-y-auto no-scrollbar" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
+        <div className="h-full p-8 pt-24 bg-black overflow-y-auto no-scrollbar" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
           <div className="flex justify-between items-center mb-10"><h2 className="text-5xl font-black italic tracking-tighter">{t.archive}</h2><button onClick={() => setMode('CAMERA')} className="w-10 h-10 rounded-full glass flex items-center justify-center">✕</button></div>
           {history.length === 0 ? <div className="py-20 text-center opacity-20 uppercase text-[9px] font-black tracking-[0.5em]">{t.empty_history}</div> : (
             <div className="grid grid-cols-2 gap-4 pb-32">
