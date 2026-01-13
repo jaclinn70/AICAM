@@ -290,10 +290,10 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
       <div className={`fixed inset-0 z-[100] bg-white transition-opacity duration-150 pointer-events-none ${shutterActive ? 'opacity-100' : 'opacity-0'}`} />
       
-      {/* Global Header - Always visible on top of everything including onboarding */}
-      <div className="fixed top-12 left-6 right-6 flex justify-between items-center z-[250]">
-         <div className="font-black italic text-2xl tracking-tighter">AI<span className="text-blue-500">.</span>CAM</div>
-         <div className="flex items-center gap-2">
+      {/* Global Header */}
+      <div className="fixed top-12 left-6 right-6 flex justify-between items-center z-[250] pointer-events-none">
+         <div className="font-black italic text-2xl tracking-tighter pointer-events-auto">AI<span className="text-blue-500">.</span>CAM</div>
+         <div className="flex items-center gap-2 pointer-events-auto">
             <button onClick={toggleLanguage} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 uppercase min-w-[38px] transition-colors active:bg-white active:text-black">{lang}</button>
             {mode === 'CAMERA' && !showOnboarding && <button onClick={() => { setIsMirrored(!isMirrored); tg?.HapticFeedback?.impactOccurred('light'); }} className={`glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 ${isMirrored ? 'bg-white text-black' : 'text-white/40'}`}>🪞</button>}
             <button onClick={() => setActiveActionSheet('RECHARGE')} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10">⚡️ {credits}</button>
@@ -303,7 +303,7 @@ const App: React.FC = () => {
 
       {showOnboarding && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center animate-in duration-500 overflow-y-auto no-scrollbar">
-          <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-2xl mt-16">📸</div>
+          <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-2xl mt-20">📸</div>
           <h2 className="text-2xl font-black italic tracking-tighter mb-6 uppercase">{t.onboarding_title}</h2>
           <div className="space-y-4 text-left w-full max-w-xs mb-8">
             {[{ icon: '📸', t: t.step1_t, d: t.step1_d }, { icon: '🪄', t: t.step2_t, d: t.step2_d }, { icon: '⚡️', t: t.step3_t, d: t.step3_d }].map((step, i) => (
@@ -366,9 +366,9 @@ const App: React.FC = () => {
 
       {mode === 'PREVIEW' && displayImage && (
         <div className="h-full flex flex-col bg-black relative">
-          <div className="flex-grow flex items-center justify-center p-4 pt-24 pb-4 relative overflow-hidden touch-none" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)} onPointerLeave={() => setShowOriginal(false)}>
+          <div className="flex-grow flex items-center justify-center p-4 pt-28 pb-4 relative overflow-hidden touch-none" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)} onPointerLeave={() => setShowOriginal(false)}>
             <img src={showOriginal ? originalPhoto! : displayImage} className={`rounded-3xl shadow-2xl transition-all duration-200 object-cover ${aspectRatio === '9:16' ? 'h-full w-auto aspect-[9/16]' : 'w-full h-auto aspect-[16/9]'}`} alt="Preview" />
-            {showOriginal && <div className="absolute top-28 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 z-10">{t.original}</div>}
+            {showOriginal && <div className="absolute top-32 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 z-10">{t.original}</div>}
             {isProcessing && <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center z-50"><div className="w-12 h-12 border-4 border-t-blue-500 border-white/10 rounded-full animate-spin mb-6" /><div className="text-[10px] font-black uppercase tracking-widest animate-pulse">{t.drawing}</div></div>}
           </div>
           <div className="bg-zinc-900/90 backdrop-blur-2xl rounded-t-[3rem] p-6 pb-20 border-t border-white/10" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
@@ -398,7 +398,7 @@ const App: React.FC = () => {
       )}
 
       {mode === 'GALLERY' && (
-        <div className="h-full p-8 pt-24 bg-black overflow-y-auto no-scrollbar" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
+        <div className="h-full p-8 pt-28 bg-black overflow-y-auto no-scrollbar" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
           <div className="flex justify-between items-center mb-10"><h2 className="text-5xl font-black italic tracking-tighter">{t.archive}</h2><button onClick={() => setMode('CAMERA')} className="w-10 h-10 rounded-full glass flex items-center justify-center">✕</button></div>
           {history.length === 0 ? <div className="py-20 text-center opacity-20 uppercase text-[9px] font-black tracking-[0.5em]">{t.empty_history}</div> : (
             <div className="grid grid-cols-2 gap-4 pb-32">
