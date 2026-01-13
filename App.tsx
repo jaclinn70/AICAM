@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppMode, HistoryItem, AspectRatio, Language } from './types';
 import { PRESETS } from './constants';
@@ -9,6 +8,34 @@ declare global {
     Telegram: any;
   }
 }
+
+// Премиальная иконка приложения
+const AppIcon = ({ size = 64, className = "", idPrefix = "" }: { size?: number, className?: string, idPrefix?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <linearGradient id={`grad_${idPrefix}`} x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#1E40AF" />
+        <stop offset="50%" stopColor="#3B82F6" />
+        <stop offset="100%" stopColor="#60A5FA" />
+      </linearGradient>
+      <filter id={`blur_${idPrefix}`} x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="20" />
+      </filter>
+    </defs>
+    <rect width="1024" height="1024" rx="220" fill={`url(#grad_${idPrefix})`} />
+    <circle cx="200" cy="200" r="150" fill="white" fillOpacity="0.05" filter={`url(#blur_${idPrefix})`} />
+    <circle cx="824" cy="824" r="180" fill="white" fillOpacity="0.08" filter={`url(#blur_${idPrefix})`} />
+    <rect x="212" y="312" width="600" height="400" rx="80" stroke="white" strokeWidth="40" strokeOpacity="0.2" />
+    <path d="M412 312L440 240H584L612 312" stroke="white" strokeWidth="40" strokeOpacity="0.2" strokeLinejoin="round" />
+    <circle cx="512" cy="512" r="160" fill="white" fillOpacity="0.1" stroke="white" strokeWidth="20" />
+    <circle cx="512" cy="512" r="100" fill="white" fillOpacity="0.15" stroke="white" strokeWidth="10" />
+    <circle cx="512" cy="512" r="40" fill="white" />
+    <circle cx="750" cy="380" r="30" fill="#FDE047">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="3s" repeatCount="indefinite" />
+    </circle>
+    <path d="M750 330V430M700 380H800" stroke="#FDE047" strokeWidth="15" strokeLinecap="round" opacity="0.8" />
+  </svg>
+);
 
 const UI_STRINGS = {
   ru: {
@@ -40,7 +67,9 @@ const UI_STRINGS = {
     ai_thinking: 'Ой! Нейросеть задумалась. Попробуйте еще раз.',
     error_processing: 'Произошла ошибка при обработке.',
     categories: ['Улучшения', 'Цвет и Тон', 'Арт-стили', 'Свой'],
-    mirror: 'Зеркало'
+    mirror: 'Зеркало',
+    enable_camera: 'Включить камеру',
+    camera_error: 'Нет доступа к камере'
   },
   en: {
     onboarding_title: 'Smart AI Camera',
@@ -71,7 +100,9 @@ const UI_STRINGS = {
     ai_thinking: 'AI is thinking too long. Try again.',
     error_processing: 'Processing error occurred.',
     categories: ['Enhance', 'Color & Tone', 'Artistic', 'Custom'],
-    mirror: 'Mirror'
+    mirror: 'Mirror',
+    enable_camera: 'Enable Camera',
+    camera_error: 'Camera access denied'
   }
 };
 
@@ -115,6 +146,7 @@ const App: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [activeActionSheet, setActiveActionSheet] = useState<'NONE' | 'SAVE' | 'SUPPORT' | 'RECHARGE'>('NONE');
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -122,6 +154,7 @@ const App: React.FC = () => {
 
   const t = useMemo(() => UI_STRINGS[lang], [lang]);
 
+  // Telegram Main Button Management
   useEffect(() => {
     if (tg?.MainButton) {
       if (mode === 'PREVIEW' && !isProcessing) {
@@ -134,18 +167,16 @@ const App: React.FC = () => {
   }, [mode, isProcessing, t.done, tg]);
 
   useEffect(() => {
-    const onMainClick = () => {
-      if (mode === 'PREVIEW') setActiveActionSheet('SAVE');
-    };
+    const onMainClick = () => { if (mode === 'PREVIEW') setActiveActionSheet('SAVE'); };
     tg?.MainButton?.onClick(onMainClick);
     return () => tg?.MainButton?.offClick(onMainClick);
   }, [mode, tg]);
 
+  // Language & Onboarding
   useEffect(() => {
     const savedLang = localStorage.getItem('ai_cam_lang') as Language;
-    if (savedLang) {
-      setLang(savedLang);
-    } else {
+    if (savedLang) setLang(savedLang);
+    else {
       const tgLang = tg?.initDataUnsafe?.user?.language_code;
       if (tgLang && tgLang.startsWith('en')) setLang('en');
     }
@@ -153,23 +184,50 @@ const App: React.FC = () => {
     if (!seen) setShowOnboarding(true);
   }, [tg]);
 
-  useEffect(() => {
-    setActiveCategory(t.categories[0]);
-  }, [lang, t.categories]);
+  useEffect(() => { setActiveCategory(t.categories[0]); }, [lang, t.categories]);
+  useEffect(() => { setIsMirrored(facingMode === 'user'); }, [facingMode]);
+
+  // Camera Logic
+  const startCamera = useCallback(async () => {
+    if (mode !== 'CAMERA' || showOnboarding) return;
+    setIsCameraReady(false);
+    setCameraError(false);
+    try {
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => track.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => setIsCameraReady(true)).catch(() => setCameraError(true));
+        };
+      }
+    } catch (e) { 
+      console.error(e);
+      setCameraError(true);
+    }
+  }, [facingMode, mode, showOnboarding]);
 
   useEffect(() => {
-    setIsMirrored(facingMode === 'user');
-  }, [facingMode]);
+    startCamera();
+    return () => {
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => track.stop());
+      }
+    };
+  }, [startCamera]);
 
+  // TG specific layout fixes
   useEffect(() => {
-    const isTg = !!(tg?.initData && tg?.initData !== "");
-    if (isTg) {
+    if (tg) {
       tg.ready();
       tg.expand();
-      const color = tg.themeParams?.bg_color || '#000000';
-      tg.headerColor = color;
-      tg.backgroundColor = color;
-      
       const onBack = () => {
         if (mode !== 'CAMERA') {
           setMode('CAMERA');
@@ -183,25 +241,6 @@ const App: React.FC = () => {
       return () => tg.BackButton.offClick(onBack);
     }
   }, [tg, mode]);
-
-  const startCamera = useCallback(async () => {
-    if (mode !== 'CAMERA') return;
-    setIsCameraReady(false);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          setIsCameraReady(true);
-          videoRef.current?.play();
-        };
-      }
-    } catch (e) { console.error(e); }
-  }, [facingMode, mode]);
-
-  useEffect(() => { startCamera(); }, [startCamera]);
 
   const capture = useCallback(() => {
     const v = videoRef.current;
@@ -253,27 +292,17 @@ const App: React.FC = () => {
           id: Date.now().toString(), original: originalPhoto, processed: res, presetName: name, timestamp: Date.now(), ratio: aspectRatio
         }, ...h].slice(0, 20));
         tg?.HapticFeedback?.notificationOccurred('success');
-      } else {
-        if (tg?.initData) tg.showAlert(t.ai_thinking);
-      }
+      } else if (tg?.initData) tg.showAlert(t.ai_thinking);
     } catch (error) { 
       if (tg?.initData) tg.showAlert(t.error_processing);
     } finally { setIsProcessing(false); }
-  };
-
-  const toggleLanguage = () => {
-    const next = lang === 'ru' ? 'en' : 'ru';
-    setLang(next);
-    localStorage.setItem('ai_cam_lang', next);
-    tg?.HapticFeedback?.impactOccurred('light');
   };
 
   const handleAction = (type: 'PAYPAL' | 'YOOMONEY' | 'SAVE') => {
     tg?.HapticFeedback?.impactOccurred('light');
     if (type === 'SAVE' && displayImage) {
       const a = document.createElement('a');
-      a.href = displayImage;
-      a.download = `AICAM_${Date.now()}.png`;
+      a.href = displayImage; a.download = `AICAM_${Date.now()}.png`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       if (tg?.initData) tg.showAlert(t.saved); 
     } else if (type === 'PAYPAL') {
@@ -287,107 +316,115 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
+    // Fix: Removed duplicate height property from style object as it is not allowed in JSX. Using 100dvh for better mobile layout.
+    <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden touch-none" style={{ height: '100dvh' }}>
       <div className={`fixed inset-0 z-[100] bg-white transition-opacity duration-150 pointer-events-none ${shutterActive ? 'opacity-100' : 'opacity-0'}`} />
       
-      {/* Global Header */}
-      <div className="fixed top-12 left-6 right-6 flex justify-between items-center z-[250] pointer-events-none">
-         <div className="font-black italic text-2xl tracking-tighter pointer-events-auto">AI<span className="text-blue-500">.</span>CAM</div>
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 h-24 flex justify-between items-end px-6 pb-4 z-[250] pointer-events-none">
+         <div className="font-black italic text-xl tracking-tighter pointer-events-auto flex items-center gap-2">
+            <AppIcon size={24} idPrefix="header" />
+            <span>AI<span className="text-blue-500">.</span>CAM</span>
+         </div>
          <div className="flex items-center gap-2 pointer-events-auto">
-            <button onClick={toggleLanguage} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 uppercase min-w-[38px] transition-colors active:bg-white active:text-black">{lang}</button>
-            {mode === 'CAMERA' && !showOnboarding && <button onClick={() => { setIsMirrored(!isMirrored); tg?.HapticFeedback?.impactOccurred('light'); }} className={`glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10 ${isMirrored ? 'bg-white text-black' : 'text-white/40'}`}>🪞</button>}
-            <button onClick={() => setActiveActionSheet('RECHARGE')} className="glass px-3 py-2 rounded-full text-[10px] font-black border border-white/10">⚡️ {credits}</button>
-            <button onClick={() => setActiveActionSheet('SUPPORT')} className="glass w-9 h-9 rounded-full flex items-center justify-center border border-white/10 text-lg">💎</button>
+            <button onClick={() => { setLang(l => l === 'ru' ? 'en' : 'ru'); tg?.HapticFeedback?.impactOccurred('light'); }} className="glass px-3 py-1.5 rounded-full text-[10px] font-black border border-white/10 uppercase">{lang}</button>
+            <button onClick={() => setActiveActionSheet('RECHARGE')} className="glass px-3 py-1.5 rounded-full text-[10px] font-black border border-white/10">⚡️ {credits}</button>
+            <button onClick={() => setActiveActionSheet('SUPPORT')} className="glass w-8 h-8 rounded-full flex items-center justify-center border border-white/10 text-base">💎</button>
          </div>
       </div>
 
       {showOnboarding && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center animate-in duration-500 overflow-y-auto no-scrollbar">
-          <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-2xl mt-20">📸</div>
-          <h2 className="text-2xl font-black italic tracking-tighter mb-6 uppercase">{t.onboarding_title}</h2>
-          <div className="space-y-4 text-left w-full max-w-xs mb-8">
-            {[{ icon: '📸', t: t.step1_t, d: t.step1_d }, { icon: '🪄', t: t.step2_t, d: t.step2_d }, { icon: '⚡️', t: t.step3_t, d: t.step3_d }].map((step, i) => (
-              <div key={i} className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl">
-                <div className="text-xl">{step.icon}</div>
-                <div><div className="text-[10px] font-black uppercase text-blue-500">{step.t}</div><div className="text-[11px] text-white/50">{step.d}</div></div>
+        <div className="fixed inset-0 z-[500] bg-black flex flex-col items-center justify-center p-8 text-center animate-in">
+          <div className="mb-8"><AppIcon size={100} idPrefix="onboard" className="shadow-[0_0_60px_rgba(59,130,246,0.5)] rounded-[35px]" /></div>
+          <h2 className="text-2xl font-black italic mb-8 uppercase">{t.onboarding_title}</h2>
+          <div className="space-y-4 text-left w-full max-w-xs mb-10">
+            {[{ i: '📸', t: t.step1_t, d: t.step1_d }, { i: '🪄', t: t.step2_t, d: t.step2_d }, { i: '⚡️', t: t.step3_t, d: t.step3_d }].map((s, idx) => (
+              <div key={idx} className="flex items-center gap-4 bg-white/5 p-4 rounded-3xl border border-white/10">
+                <span className="text-xl">{s.i}</span><div><div className="text-[10px] font-black uppercase text-blue-400">{s.t}</div><div className="text-[11px] text-white/40">{s.d}</div></div>
               </div>
             ))}
           </div>
-          <button onClick={() => { setShowOnboarding(false); localStorage.setItem('ai_cam_onboarding_seen', 'true'); }} className="w-full max-w-xs py-4 bg-white text-black rounded-xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-transform">{t.go_btn}</button>
+          <button onClick={() => { setShowOnboarding(false); localStorage.setItem('ai_cam_onboarding_seen', 'true'); startCamera(); }} className="w-full max-w-xs py-4 bg-blue-600 rounded-2xl text-[11px] font-black uppercase tracking-widest">{t.go_btn}</button>
         </div>
       )}
 
       {activeActionSheet !== 'NONE' && (
-        <>
-          <div className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm animate-in" onClick={() => setActiveActionSheet('NONE')} />
-          <div className="fixed inset-x-0 bottom-0 z-[310] bg-zinc-900 rounded-t-[2.5rem] p-6 pb-12 animate-in border-t border-white/10 max-h-[90vh] overflow-y-auto" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-8" />
-            {activeActionSheet === 'SAVE' && <button onClick={() => handleAction('SAVE')} className="w-full py-5 bg-blue-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-[0.98] transition-all">{t.action_download}</button>}
+        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setActiveActionSheet('NONE')} />
+          <div className="relative bg-zinc-900 rounded-t-[2.5rem] p-6 pb-12 border-t border-white/10 animate-in">
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+            {activeActionSheet === 'SAVE' && <button onClick={() => handleAction('SAVE')} className="w-full py-5 bg-blue-500 rounded-2xl font-black uppercase text-[10px] tracking-widest">{t.action_download}</button>}
             {activeActionSheet === 'SUPPORT' && (
               <div className="space-y-4 text-center">
-                 <h3 className="font-black uppercase text-[10px] tracking-widest mb-1">{t.support_title}</h3>
-                 <p className="text-white/40 text-[11px] mb-6">{t.support_desc}</p>
-                 <div className="grid grid-cols-1 gap-3">
-                    <button onClick={() => handleAction('PAYPAL')} className="w-full py-5 bg-[#0070ba] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest active:opacity-90">PayPal</button>
-                    <button onClick={() => handleAction('YOOMONEY')} className="w-full py-5 bg-[#8b3ffc] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest active:opacity-90">ЮMoney</button>
+                 <h3 className="font-black uppercase text-[10px] tracking-widest">{t.support_title}</h3>
+                 <p className="text-white/40 text-[11px] px-4">{t.support_desc}</p>
+                 <div className="grid grid-cols-1 gap-3 pt-4">
+                    <button onClick={() => handleAction('PAYPAL')} className="w-full py-4 bg-[#0070ba] rounded-2xl font-black uppercase text-[10px] tracking-widest">PayPal</button>
+                    <button onClick={() => handleAction('YOOMONEY')} className="w-full py-4 bg-[#8b3ffc] rounded-2xl font-black uppercase text-[10px] tracking-widest">ЮMoney</button>
                  </div>
               </div>
             )}
             {activeActionSheet === 'RECHARGE' && (
               <div className="space-y-4">
-                <div className="text-center mb-6"><h3 className="font-black uppercase text-[10px] tracking-widest mb-1">{t.energy_title}</h3><p className="text-white/40 text-[11px]">{t.energy_desc}</p></div>
-                <div className="grid grid-cols-1 gap-3">
-                  {[{ stars: 5, amount: "30" }, { stars: 15, amount: "100", popular: true }, { stars: 49, amount: t.energy_limit }].map((pkg, i) => (
-                    <button key={i} className={`w-full p-5 rounded-2xl border flex items-center justify-between active:scale-[0.98] transition-all ${pkg.popular ? 'bg-blue-500/10 border-blue-500' : 'bg-white/5 border-white/10'}`}>
-                      <div className="text-left"><div className="text-[10px] font-black uppercase">{t.energy_pack}</div><div className="text-sm font-bold text-blue-400">+{pkg.amount}</div></div>
-                      <div className="bg-white/10 px-3 py-1.5 rounded-full font-black text-xs">{pkg.stars} ⭐️</div>
+                <div className="text-center"><h3 className="font-black uppercase text-[10px] tracking-widest">{t.energy_title}</h3><p className="text-white/40 text-[11px]">{t.energy_desc}</p></div>
+                {[{ s: 5, a: "30" }, { s: 15, a: "100", p: true }, { s: 49, a: t.energy_limit }].map((pkg, i) => (
+                    <button key={i} className={`w-full p-4 rounded-2xl border flex items-center justify-between ${pkg.p ? 'bg-blue-500/10 border-blue-500' : 'bg-white/5 border-white/10'}`}>
+                      <div className="text-left"><div className="text-[9px] font-black uppercase text-white/40">{t.energy_pack}</div><div className="text-sm font-bold text-blue-400">+{pkg.a}</div></div>
+                      <div className="bg-white/10 px-3 py-1 rounded-full font-black text-[10px]">{pkg.s} ⭐️</div>
                     </button>
-                  ))}
-                </div>
+                ))}
               </div>
             )}
-            <button onClick={() => setActiveActionSheet('NONE')} className="w-full py-5 mt-4 bg-white/5 rounded-2xl font-black uppercase text-[10px] tracking-widest text-white/40">{t.action_back}</button>
+            <button onClick={() => setActiveActionSheet('NONE')} className="w-full py-4 mt-4 bg-white/5 rounded-2xl font-black uppercase text-[10px] tracking-widest text-white/40">{t.action_back}</button>
           </div>
-        </>
+        </div>
       )}
 
       {mode === 'CAMERA' && (
-        <div className="h-full relative flex flex-col bg-black">
-          <div className="flex-grow w-full relative overflow-hidden bg-zinc-950 flex items-center justify-center">
-             <video ref={videoRef} autoPlay playsInline muted className={`absolute transition-all duration-300 object-cover ${isMirrored ? 'scale-x-[-1]' : 'scale-x-[1]'}`} style={{ width: '100%', height: '100%', aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9' }} />
+        <div className="h-full flex flex-col relative">
+          <div className="flex-grow w-full relative bg-zinc-950 overflow-hidden flex items-center justify-center">
+             <video ref={videoRef} autoPlay playsInline muted className={`absolute h-full w-full object-cover transition-opacity duration-500 ${isCameraReady ? 'opacity-100' : 'opacity-0'} ${isMirrored ? 'scale-x-[-1]' : 'scale-x-[1]'}`} />
+             {!isCameraReady && !cameraError && <div className="animate-spin w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full" />}
+             {cameraError && (
+               <div className="text-center px-10">
+                 <div className="text-4xl mb-4">🚫</div>
+                 <div className="text-[10px] font-black uppercase mb-6 opacity-40">{t.camera_error}</div>
+                 <button onClick={() => startCamera()} className="px-6 py-3 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">{t.enable_camera}</button>
+               </div>
+             )}
           </div>
-          <div className="fixed inset-x-0 bottom-12 flex justify-center items-center gap-8 z-[60]">
-            <button onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')} className="w-14 h-14 rounded-full glass flex items-center justify-center text-2xl border border-white/10 active:scale-90 transition-transform">🔄</button>
-            <button onClick={capture} disabled={!isCameraReady} className="w-24 h-24 rounded-full border-[6px] border-white/20 p-1.5 active:scale-95 transition-all"><div className="w-full h-full bg-white rounded-full shadow-2xl"/></button>
-            <button onClick={() => setMode('GALLERY')} className="w-14 h-14 rounded-2xl glass overflow-hidden border border-white/10 active:scale-90 transition-transform flex items-center justify-center">{history[0] ? <img src={history[0].processed} className="w-full h-full object-cover" /> : <span className="text-xl">🎞️</span>}</button>
+          <div className="h-48 flex justify-center items-center gap-10 bg-black/50 backdrop-blur-lg">
+            <button onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')} className="w-12 h-12 rounded-full glass border border-white/10 flex items-center justify-center text-xl active:scale-90 transition-transform">🔄</button>
+            <button onClick={capture} disabled={!isCameraReady} className="w-20 h-20 rounded-full border-[4px] border-white/20 p-1 active:scale-95 transition-all disabled:opacity-20"><div className="w-full h-full bg-white rounded-full"/></button>
+            <button onClick={() => setMode('GALLERY')} className="w-12 h-12 rounded-xl glass border border-white/10 overflow-hidden flex items-center justify-center active:scale-90 transition-transform">{history[0] ? <img src={history[0].processed} className="w-full h-full object-cover" /> : <span className="text-lg">🎞️</span>}</button>
           </div>
         </div>
       )}
 
       {mode === 'PREVIEW' && displayImage && (
-        <div className="h-full flex flex-col bg-black relative">
-          <div className="flex-grow flex items-center justify-center p-4 pt-28 pb-4 relative overflow-hidden touch-none" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)} onPointerLeave={() => setShowOriginal(false)}>
-            <img src={showOriginal ? originalPhoto! : displayImage} className={`rounded-3xl shadow-2xl transition-all duration-200 object-cover ${aspectRatio === '9:16' ? 'h-full w-auto aspect-[9/16]' : 'w-full h-auto aspect-[16/9]'}`} alt="Preview" />
-            {showOriginal && <div className="absolute top-32 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 z-10">{t.original}</div>}
-            {isProcessing && <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center z-50"><div className="w-12 h-12 border-4 border-t-blue-500 border-white/10 rounded-full animate-spin mb-6" /><div className="text-[10px] font-black uppercase tracking-widest animate-pulse">{t.drawing}</div></div>}
+        <div className="h-full flex flex-col bg-black animate-in">
+          <div className="flex-grow flex items-center justify-center p-6 pt-24 pb-4 relative overflow-hidden" onPointerDown={() => setShowOriginal(true)} onPointerUp={() => setShowOriginal(false)}>
+            <img src={showOriginal ? originalPhoto! : displayImage} className={`rounded-[2rem] shadow-2xl transition-all duration-300 object-cover ${aspectRatio === '9:16' ? 'h-full w-auto' : 'w-full h-auto'}`} alt="Preview" />
+            {showOriginal && <div className="absolute top-28 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border border-white/10 z-10">{t.original}</div>}
+            {isProcessing && <div className="absolute inset-0 bg-black/50 backdrop-blur-md flex flex-col items-center justify-center z-50"><div className="w-10 h-10 border-4 border-t-blue-500 border-white/10 rounded-full animate-spin mb-4" /><div className="text-[9px] font-black uppercase tracking-widest">{t.drawing}</div></div>}
           </div>
-          <div className="bg-zinc-900/90 backdrop-blur-2xl rounded-t-[3rem] p-6 pb-20 border-t border-white/10" style={{ backgroundColor: tg?.themeParams?.secondary_bg_color || '#18181b' }}>
-            <div className="flex gap-5 mb-6 overflow-x-auto no-scrollbar px-2">
+          <div className="bg-zinc-900 rounded-t-[3rem] p-6 pb-12 border-t border-white/10">
+            <div className="flex gap-4 mb-6 overflow-x-auto no-scrollbar">
               {t.categories.map(cat => (
-                <button key={cat} onClick={() => { setActiveCategory(cat); tg?.HapticFeedback?.impactOccurred('light'); }} className={`text-[10px] font-black uppercase tracking-widest transition-all relative pb-2 min-w-max ${activeCategory === cat ? 'text-white' : 'text-white/30'}`}>{cat} {activeCategory === cat && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full" />}</button>
+                <button key={cat} onClick={() => setActiveCategory(cat)} className={`text-[9px] font-black uppercase tracking-widest pb-2 min-w-max transition-all ${activeCategory === cat ? 'text-white border-b-2 border-blue-500' : 'text-white/20 border-b-2 border-transparent'}`}>{cat}</button>
               ))}
             </div>
-            <div className="min-h-[100px] mb-4">
-              {activeCategory === t.categories[t.categories.length-1] ? (
-                <div className="relative animate-in">
-                  <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder={t.custom_placeholder} rows={3} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-blue-500 pr-14 resize-none leading-relaxed block text-white" />
-                  <button onClick={() => runAI(customPrompt, t.custom_style)} disabled={!customPrompt.trim() || isProcessing} className="absolute right-3 bottom-3 w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-lg active:scale-90 transition-all disabled:opacity-50 shadow-lg">🪄</button>
+            <div className="min-h-[90px]">
+              {activeCategory === t.categories[3] ? (
+                <div className="relative">
+                  <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder={t.custom_placeholder} rows={2} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 pr-12 resize-none text-white" />
+                  <button onClick={() => runAI(customPrompt, t.custom_style)} disabled={!customPrompt.trim() || isProcessing} className="absolute right-2 bottom-2 w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-base active:scale-90 transition-all">🪄</button>
                 </div>
               ) : (
-                <div className="flex gap-3 overflow-x-auto no-scrollbar py-2">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar">
                   {PRESETS.filter(p => p.category === UI_STRINGS.en.categories[t.categories.indexOf(activeCategory)]).map(p => (
-                    <button key={p.id} onClick={() => runAI(p.prompt, p.name[lang])} className="glass px-5 py-4 rounded-2xl min-w-max flex flex-col items-center gap-2 border border-white/5 active:bg-blue-500/20 transition-all">
-                      <span className="text-2xl">{p.icon}</span><span className="text-[9px] font-black uppercase tracking-wider">{p.name[lang]}</span>
+                    <button key={p.id} onClick={() => runAI(p.prompt, p.name[lang])} className="glass px-4 py-3 rounded-xl min-w-max flex flex-col items-center gap-1 border border-white/5 active:bg-blue-500/20 transition-all">
+                      <span className="text-xl">{p.icon}</span><span className="text-[8px] font-black uppercase">{p.name[lang]}</span>
                     </button>
                   ))}
                 </div>
@@ -398,14 +435,14 @@ const App: React.FC = () => {
       )}
 
       {mode === 'GALLERY' && (
-        <div className="h-full p-8 pt-28 bg-black overflow-y-auto no-scrollbar" style={{ backgroundColor: tg?.themeParams?.bg_color || '#000000' }}>
-          <div className="flex justify-between items-center mb-10"><h2 className="text-5xl font-black italic tracking-tighter">{t.archive}</h2><button onClick={() => setMode('CAMERA')} className="w-10 h-10 rounded-full glass flex items-center justify-center">✕</button></div>
+        <div className="h-full p-6 pt-24 bg-black overflow-y-auto no-scrollbar animate-in">
+          <div className="flex justify-between items-center mb-8"><h2 className="text-4xl font-black italic">{t.archive}</h2><button onClick={() => setMode('CAMERA')} className="w-10 h-10 rounded-full glass flex items-center justify-center">✕</button></div>
           {history.length === 0 ? <div className="py-20 text-center opacity-20 uppercase text-[9px] font-black tracking-[0.5em]">{t.empty_history}</div> : (
-            <div className="grid grid-cols-2 gap-4 pb-32">
+            <div className="grid grid-cols-2 gap-3 pb-20">
               {history.map(item => (
-                <div key={item.id} onClick={() => { setDisplayImage(item.processed); setOriginalPhoto(item.original); setAspectRatio(item.ratio); setMode('PREVIEW'); }} className={`rounded-[2rem] overflow-hidden border border-white/5 active:scale-95 transition-all bg-zinc-900 relative ${item.ratio === '9:16' ? 'aspect-[9/16]' : 'aspect-[16/9] col-span-2'}`}>
-                  <img src={item.processed} className="w-full h-full object-cover" loading="lazy" />
-                  <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-[8px] font-bold uppercase">{item.presetName}</div>
+                <div key={item.id} onClick={() => { setDisplayImage(item.processed); setOriginalPhoto(item.original); setAspectRatio(item.ratio); setMode('PREVIEW'); }} className={`rounded-2xl overflow-hidden border border-white/5 active:scale-95 transition-all bg-zinc-900 relative ${item.ratio === '9:16' ? 'aspect-[9/16]' : 'aspect-[16/9] col-span-2'}`}>
+                  <img src={item.processed} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-[7px] font-bold uppercase">{item.presetName}</div>
                 </div>
               ))}
             </div>
@@ -416,5 +453,7 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+export default App;
 
 export default App;
