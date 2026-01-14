@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppMode, HistoryItem, AspectRatio, Language } from './types';
 import { PRESETS } from './constants';
-import { processImage } from './geminiService';
+import { processImage } from './services/geminiService';
 
 declare global {
   interface Window {
