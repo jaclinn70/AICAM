@@ -18,5 +18,5 @@
       "*": ["*"]
     }
   },
-  "include": ["index.tsx", "App.tsx", "geminiService.ts", "types.ts", "constants.tsx"]
+  "include": ["**/*.ts", "**/*.tsx"]
 }
