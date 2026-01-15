@@ -133,7 +133,7 @@ const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('CAMERA');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [isMirrored, setIsMirrored] = useState<boolean>(false);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
+  const aspectRatio: AspectRatio = '9:16';
   const [originalPhoto, setOriginalPhoto] = useState<string | null>(null);
   const [displayImage, setDisplayImage] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
