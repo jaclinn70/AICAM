@@ -385,25 +385,43 @@ const App: React.FC = () => {
       )}
 
       {mode === 'CAMERA' && (
-        <div className="h-full flex flex-col relative">
-          <div className="flex-grow w-full relative bg-zinc-950 overflow-hidden flex items-center justify-center">
-             <video ref={videoRef} autoPlay playsInline muted className={`absolute h-full w-full object-cover transition-opacity duration-500 ${isCameraReady ? 'opacity-100' : 'opacity-0'} ${isMirrored ? 'scale-x-[-1]' : 'scale-x-[1]'}`} />
-             {!isCameraReady && !cameraError && <div className="animate-spin w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full" />}
-             {cameraError && (
-               <div className="text-center px-10">
-                 <div className="text-4xl mb-4">🚫</div>
-                 <div className="text-[10px] font-black uppercase mb-6 opacity-40">{t.camera_error}</div>
-                 <button onClick={() => startCamera()} className="px-6 py-3 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">{t.enable_camera}</button>
-               </div>
-             )}
-          </div>
-          <div className="h-48 flex justify-center items-center gap-10 bg-black/50 backdrop-blur-lg">
-            <button onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')} className="w-12 h-12 rounded-full glass border border-white/10 flex items-center justify-center text-xl active:scale-90 transition-transform">🔄</button>
-            <button onClick={capture} disabled={!isCameraReady} className="w-20 h-20 rounded-full border-[4px] border-white/20 p-1 active:scale-95 transition-all disabled:opacity-20"><div className="w-full h-full bg-white rounded-full"/></button>
-            <button onClick={() => setMode('GALLERY')} className="w-12 h-12 rounded-xl glass border border-white/10 overflow-hidden flex items-center justify-center active:scale-90 transition-transform">{history[0] ? <img src={history[0].processed} className="w-full h-full object-cover" /> : <span className="text-lg">🎞️</span>}</button>
-          </div>
+  <div className="fixed inset-0 bg-black flex items-center justify-center">
+    {/* CAMERA FRAME 9:16 */}
+    <div className="relative w-full max-w-[430px] aspect-[9/16] bg-black overflow-hidden rounded-[2.5rem]">
+      
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`absolute inset-0 w-full h-full object-cover ${
+          isMirrored ? 'scale-x-[-1]' : ''
+        }`}
+      />
+
+      {!isCameraReady && !cameraError && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-10 h-10 border-2 border-white/30 border-t-blue-500 rounded-full animate-spin" />
         </div>
       )}
+
+      {cameraError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
+          <div className="text-4xl mb-4">🚫</div>
+          <div className="text-xs font-bold uppercase opacity-50 mb-6">
+            {t.camera_error}
+          </div>
+          <button
+            onClick={startCamera}
+            className="px-6 py-3 bg-white text-black rounded-full font-black uppercase text-xs tracking-widest"
+          >
+            {t.enable_camera}
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
       {mode === 'PREVIEW' && displayImage && (
         <div className="h-full flex flex-col bg-black animate-in">
