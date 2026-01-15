@@ -244,23 +244,34 @@ useEffect(() => {
   }, [startCamera]);
 
   // TG specific layout fixes
-  useEffect(() => {
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      const onBack = () => {
-        if (mode !== 'CAMERA') {
-          setMode('CAMERA');
-          setDisplayImage(null);
-          setOriginalPhoto(null);
-          setActiveActionSheet('NONE');
-        }
-      };
-      tg.BackButton.onClick(onBack);
-      if (mode !== 'CAMERA') tg.BackButton.show(); else tg.BackButton.hide();
-      return () => tg.BackButton.offClick(onBack);
+ useEffect(() => {
+  if (!tg) return;
+
+  tg.ready();
+
+  // 🔥 КЛЮЧЕВОЕ
+  tg.expand();
+  tg.setHeaderColor('#000000');
+  tg.setBackgroundColor('#000000');
+
+  document.body.style.backgroundColor = '#000';
+  document.body.style.overflow = 'hidden';
+
+  const onBack = () => {
+    if (mode !== 'CAMERA') {
+      setMode('CAMERA');
+      setDisplayImage(null);
+      setOriginalPhoto(null);
+      setActiveActionSheet('NONE');
     }
-  }, [tg, mode]);
+  };
+
+  tg.BackButton.onClick(onBack);
+  if (mode !== 'CAMERA') tg.BackButton.show();
+  else tg.BackButton.hide();
+
+  return () => tg.BackButton.offClick(onBack);
+}, [tg, mode]);
 
   const capture = useCallback(() => {
     const v = videoRef.current;
