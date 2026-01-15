@@ -413,9 +413,9 @@ useEffect(() => {
       autoPlay
       playsInline
       muted
-      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-        isCameraReady ? 'opacity-100' : 'opacity-0'
-      } ${isMirrored ? 'scale-x-[-1]' : ''}`}
+    className={`absolute left-1/2 top-1/2 min-w-full min-h-full -translate-x-1/2 -translate-y-1/2 object-cover transition-opacity duration-300 ${
+  isCameraReady ? 'opacity-100' : 'opacity-0'
+} ${isMirrored ? 'scale-x-[-1]' : ''}`}
     />
 
     {!isCameraReady && !cameraError && (
