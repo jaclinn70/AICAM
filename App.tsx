@@ -317,7 +317,11 @@ const App: React.FC = () => {
 
   return (
     // Fix: Removed duplicate height property from style object as it is not allowed in JSX. Using 100dvh for better mobile layout.
-    <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden touch-none" style={{ height: '100dvh' }}>
+    <div className="fixed inset-0 bg-black text-white font-['Inter'] select-none overflow-hidden touch-none" style={{
+  height: '100dvh',
+  paddingTop: 'env(safe-area-inset-top)',
+}}
+>
       <div className={`fixed inset-0 z-[100] bg-white transition-opacity duration-150 pointer-events-none ${shutterActive ? 'opacity-100' : 'opacity-0'}`} />
       
       {/* Header */}
