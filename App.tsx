@@ -188,30 +188,47 @@ const App: React.FC = () => {
   useEffect(() => { setIsMirrored(facingMode === 'user'); }, [facingMode]);
 
   // Camera Logic
-  const startCamera = useCallback(async () => {
-    if (mode !== 'CAMERA' || showOnboarding) return;
-    setIsCameraReady(false);
-    setCameraError(false);
-    try {
-      if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().then(() => setIsCameraReady(true)).catch(() => setCameraError(true));
-        };
-      }
-    } catch (e) { 
-      console.error(e);
-      setCameraError(true);
+ const startCamera = useCallback(async () => {
+  if (mode !== 'CAMERA' || showOnboarding) return;
+
+  setIsCameraReady(false);
+  setCameraError(false);
+
+  try {
+    if (videoRef.current?.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach(track => track.stop());
     }
-  }, [facingMode, mode, showOnboarding]);
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode,
+        aspectRatio: 9 / 16,
+        width: { ideal: 1080 },
+        height: { ideal: 1920 }
+      },
+      audio: false
+    });
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute('playsinline', 'true');
+      videoRef.current.muted = true;
+
+      videoRef.current.onloadedmetadata = async () => {
+        try {
+          await videoRef.current?.play();
+          setIsCameraReady(true);
+        } catch {
+          setCameraError(true);
+        }
+      };
+    }
+  } catch (err) {
+    console.error(err);
+    setCameraError(true);
+  }
+}, [facingMode, mode, showOnboarding]);
 
   useEffect(() => {
     startCamera();
