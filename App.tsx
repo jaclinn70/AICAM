@@ -155,16 +155,19 @@ const App: React.FC = () => {
   const t = useMemo(() => UI_STRINGS[lang], [lang]);
 
   // Telegram Main Button Management
-  useEffect(() => {
-    if (tg?.MainButton) {
-      if (mode === 'PREVIEW' && !isProcessing) {
-        tg.MainButton.setText(t.done);
-        tg.MainButton.show();
-      } else {
-        tg.MainButton.hide();
-      }
-    }
-  }, [mode, isProcessing, t.done, tg]);
+useEffect(() => {
+  if (!tg?.MainButton) return;
+
+  if (mode === 'CAMERA') {
+    tg.MainButton.setText('📸');
+    tg.MainButton.show();
+  } else if (mode === 'PREVIEW' && !isProcessing) {
+    tg.MainButton.setText(t.done);
+    tg.MainButton.show();
+  } else {
+    tg.MainButton.hide();
+  }
+}, [mode, isProcessing, t.done, tg]);
 
   useEffect(() => {
     const onMainClick = () => { if (mode === 'PREVIEW') setActiveActionSheet('SAVE'); };
