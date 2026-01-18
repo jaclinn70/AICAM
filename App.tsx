@@ -528,7 +528,6 @@ useEffect(() => {
           )}
         </div>
       )}
-      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 };
