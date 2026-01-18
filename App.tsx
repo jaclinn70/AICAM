@@ -435,50 +435,35 @@ useEffect(() => {
       )}
 
    {mode === 'CAMERA' && (
-  <div
-    className="fixed inset-0 bg-black flex items-center justify-center"
-    style={{ height: tgHeight ? `${tgHeight}px` : '100vh' }}
-  >
-    <div
-  className="relative bg-black h-full"
-  style={{
-    aspectRatio: '9 / 16',
-    width: tgHeight ? `${tgHeight * 9 / 16}px` : '56.25vh',
-    maxWidth: '100vw'
-  }}
->
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={`absolute left-1/2 top-1/2 min-h-full min-w-full
-  -translate-x-1/2 -translate-y-1/2 object-cover ${
-    isMirrored ? 'scale-x-[-1]' : ''
-}`}
+  <div className="fixed inset-0 bg-black overflow-hidden">
+
+    {/* VIDEO */}
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      className={`absolute left-1/2 top-1/2
+        min-h-full min-w-full
+        -translate-x-1/2 -translate-y-1/2
+        object-cover
+        ${isMirrored ? 'scale-x-[-1]' : ''}
+      `}
+    />
+
+    {/* 9:16 MASK */}
+    <div className="absolute inset-0 flex justify-center pointer-events-none">
+      <div
+        style={{
+          height: '100%',
+          aspectRatio: '9 / 16',
+          background: 'transparent',
+          boxShadow: '0 0 0 9999px rgba(0,0,0,0.7)',
+          borderRadius: '28px'
+        }}
       />
-
-      {!isCameraReady && !cameraError && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin" />
-        </div>
-      )}
-
-      {cameraError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
-          <div className="text-4xl mb-4">🚫</div>
-          <div className="text-xs font-black uppercase opacity-40 mb-6">
-            {t.camera_error}
-          </div>
-          <button
-            onClick={startCamera}
-            className="px-6 py-3 bg-white text-black rounded-full font-black uppercase text-xs tracking-widest"
-          >
-            {t.enable_camera}
-          </button>
-        </div>
-      )}
     </div>
+
   </div>
 )}
 
