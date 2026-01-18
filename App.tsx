@@ -429,6 +429,21 @@ useEffect(() => {
 } ${isMirrored ? 'scale-x-[-1]' : ''}`}
     />
 
+{/* 9:16 UI mask */}
+<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+  <div
+    className="relative h-full"
+    style={{ aspectRatio: '9 / 16' }}
+  >
+    {/* side masks */}
+    <div className="absolute -left-[100vw] top-0 h-full w-[100vw] bg-black/70" />
+    <div className="absolute -right-[100vw] top-0 h-full w-[100vw] bg-black/70" />
+
+    {/* frame */}
+    <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10" />
+  </div>
+</div>
+    
     {!isCameraReady && !cameraError && (
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin" />
