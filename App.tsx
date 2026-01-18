@@ -429,18 +429,42 @@ useEffect(() => {
 } ${isMirrored ? 'scale-x-[-1]' : ''}`}
     />
 
-{/* 9:16 UI mask */}
-<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+{/* DEBUG 9:16 MASK */}
+<div
+  className="absolute inset-0 flex items-center justify-center z-[9999]"
+  style={{ pointerEvents: 'none' }}
+>
   <div
-    className="relative h-full"
-    style={{ aspectRatio: '9 / 16' }}
+    style={{
+      aspectRatio: '9 / 16',
+      height: '100%',
+      background: 'rgba(255,0,0,0.15)',
+      border: '4px solid red',
+      borderRadius: '24px'
+    }}
   >
-    {/* side masks */}
-    <div className="absolute -left-[100vw] top-0 h-full w-[100vw] bg-black/70" />
-    <div className="absolute -right-[100vw] top-0 h-full w-[100vw] bg-black/70" />
-
-    {/* frame */}
-    <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10" />
+    {/* left mask */}
+    <div
+      style={{
+        position: 'absolute',
+        left: '-100vw',
+        top: 0,
+        width: '100vw',
+        height: '100%',
+        background: 'rgba(0,0,0,0.7)'
+      }}
+    />
+    {/* right mask */}
+    <div
+      style={{
+        position: 'absolute',
+        right: '-100vw',
+        top: 0,
+        width: '100vw',
+        height: '100%',
+        background: 'rgba(0,0,0,0.7)'
+      }}
+    />
   </div>
 </div>
     
