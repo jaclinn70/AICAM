@@ -147,6 +147,7 @@ const App: React.FC = () => {
   const [activeActionSheet, setActiveActionSheet] = useState<'NONE' | 'SAVE' | 'SUPPORT' | 'RECHARGE'>('NONE');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [tgHeight, setTgHeight] = useState<number | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
