@@ -157,24 +157,42 @@ const App: React.FC = () => {
 
   // Telegram Main Button Management
 useEffect(() => {
-  if (!tg?.MainButton) return;
+  if (!tg) return;
 
-  if (mode === 'CAMERA') {
-    tg.MainButton.setText('📸');
-    tg.MainButton.show();
-  } else if (mode === 'PREVIEW' && !isProcessing) {
-    tg.MainButton.setText(t.done);
-    tg.MainButton.show();
-  } else {
-    tg.MainButton.hide();
-  }
-}, [mode, isProcessing, t.done, tg]);
+  tg.ready();
+  tg.expand();
 
-  useEffect(() => {
-    const onMainClick = () => { if (mode === 'PREVIEW') setActiveActionSheet('SAVE'); };
-    tg?.MainButton?.onClick(onMainClick);
-    return () => tg?.MainButton?.offClick(onMainClick);
-  }, [mode, tg]);
+  // 🔑 Фиксируем реальную высоту Telegram WebApp
+  const updateHeight = () => {
+    const h =
+      tg.viewportStableHeight ||
+      tg.viewportHeight ||
+      window.innerHeight;
+
+    setTgHeight(h);
+  };
+
+  updateHeight();
+  tg.onEvent('viewportChanged', updateHeight);
+
+  const onBack = () => {
+    if (mode !== 'CAMERA') {
+      setMode('CAMERA');
+      setDisplayImage(null);
+      setOriginalPhoto(null);
+      setActiveActionSheet('NONE');
+    }
+  };
+
+  tg.BackButton.onClick(onBack);
+  if (mode !== 'CAMERA') tg.BackButton.show();
+  else tg.BackButton.hide();
+
+  return () => {
+    tg.offEvent('viewportChanged', updateHeight);
+    tg.BackButton.offClick(onBack);
+  };
+}, [tg, mode]);
 
   // Language & Onboarding
   useEffect(() => {
