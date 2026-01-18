@@ -440,9 +440,13 @@ useEffect(() => {
     style={{ height: tgHeight ? `${tgHeight}px` : '100vh' }}
   >
     <div
-      className="relative h-full bg-black"
-      style={{ aspectRatio: '9 / 16' }}
-    >
+  className="relative bg-black h-full"
+  style={{
+    aspectRatio: '9 / 16',
+    width: tgHeight ? `${tgHeight * 9 / 16}px` : '56.25vh',
+    maxWidth: '100vw'
+  }}
+>
       <video
         ref={videoRef}
         autoPlay
