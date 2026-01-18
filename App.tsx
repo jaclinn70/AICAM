@@ -452,16 +452,12 @@ useEffect(() => {
     />
 
     {/* 9:16 MASK */}
-    <div className="absolute inset-0 flex justify-center pointer-events-none">
-      <div
-        style={{
-          height: '100%',
-          aspectRatio: '9 / 16',
-          background: 'transparent',
-          boxShadow: '0 0 0 9999px rgba(0,0,0,0.7)',
-          borderRadius: '28px'
-        }}
-      />
+    <div
+  className="absolute inset-0 z-[9999]"
+  style={{
+    background: 'rgba(255,0,0,0.4)'
+  }}
+/>
     </div>
 
   </div>
