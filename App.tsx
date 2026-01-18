@@ -436,51 +436,22 @@ useEffect(() => {
 
     {mode === 'CAMERA' && (
   <div
-    className="fixed left-0 top-0 w-full bg-black overflow-hidden flex justify-center"
+    className="fixed inset-0 bg-black flex items-center justify-center"
     style={{ height: tgHeight ? `${tgHeight}px` : '100vh' }}
   >
-    {/* 9:16 physical container */}
     <div
-      className="relative h-full overflow-hidden"
+      className="relative h-full bg-black"
       style={{ aspectRatio: '9 / 16' }}
     >
-
-      {/* Camera */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`absolute left-1/2 top-1/2 min-w-full min-h-full 
-          -translate-x-1/2 -translate-y-1/2 object-cover
-          transition-opacity duration-300
-          ${isCameraReady ? 'opacity-100' : 'opacity-0'}
-          ${isMirrored ? 'scale-x-[-1]' : ''}`}
+        className={`absolute inset-0 w-full h-full object-cover ${
+          isMirrored ? 'scale-x-[-1]' : ''
+        }`}
       />
-
-      {/* Loader */}
-      {!isCameraReady && !cameraError && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin" />
-        </div>
-      )}
-
-      {/* Error */}
-      {cameraError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
-          <div className="text-4xl mb-4">🚫</div>
-          <div className="text-xs font-black uppercase opacity-40 mb-6">
-            {t.camera_error}
-          </div>
-          <button
-            onClick={startCamera}
-            className="px-6 py-3 bg-white text-black rounded-full font-black uppercase text-xs tracking-widest"
-          >
-            {t.enable_camera}
-          </button>
-        </div>
-      )}
-
     </div>
   </div>
 )}
